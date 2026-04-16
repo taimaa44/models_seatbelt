@@ -1,7 +1,7 @@
 fastapi
 uvicorn
-tensorflow-cpu
 opencv-python-headless
 numpy
 python-multipart
 gdown
+tensorflow==2.15.0
