@@ -10,55 +10,66 @@ app = FastAPI()
 
 MODEL_PATH = "seatbelt_classifier_final.keras"
 
-# تحميل الموديل من Google Drive (مرة واحدة)
+# تحميل الموديل من Google Drive
 if not os.path.exists(MODEL_PATH):
+    print("⬇️ Downloading model...")
     gdown.download(
         "https://drive.google.com/uc?id=14gorD0JYxYif8jiKZt-pYvdzglWyQeqH",
         MODEL_PATH,
         quiet=False
     )
 
-# ❗ لا نحمل الموديل هون (عشان ما ينهار السيرفر)
 model = None
 
 class_names = ["No Seatbelt", "Seatbelt"]
 
-# 🔥 الصفحة الرئيسية
 @app.get("/")
 def home():
     return {"message": "API is working 🚀"}
 
-# 🔥 prediction
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     global model
 
-    # تحميل الموديل فقط أول مرة
-    if model is None:
-        print("⏳ Loading model...")
-        model = tf.keras.models.load_model(MODEL_PATH)
-        print("✅ Model loaded")
+    try:
+        # تحميل الموديل أول مرة فقط
+        if model is None:
+            print("⏳ Loading model...")
+            model = tf.keras.models.load_model(MODEL_PATH)
+            print("✅ Model loaded")
 
-    # حفظ الصورة
-    with open("input.jpg", "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        # حفظ الصورة
+        file_path = "input.jpg"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    # قراءة ومعالجة الصورة
-    img = cv2.imread("input.jpg")
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # مهم
-    img = cv2.resize(img, (300, 300))
-    img = img / 255.0
-    img = np.expand_dims(img, axis=0)
+        # قراءة الصورة
+        img = cv2.imread(file_path)
 
-    # prediction
-    pred = model.predict(img)[0][0]
+        if img is None:
+            return {"error": "Image not read correctly"}
 
-    label = class_names[1] if pred > 0.5 else class_names[0]
+        # معالجة الصورة
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (300, 300))
+        img = img.astype("float32") / 255.0
+        img = np.expand_dims(img, axis=0)
 
-    return {
-        "prediction": label,
-        "confidence": float(pred)
-    }
+        # prediction
+        pred = model.predict(img, verbose=0)[0][0]
+
+        label = class_names[1] if pred > 0.5 else class_names[0]
+
+        return {
+            "prediction": label,
+            "confidence": float(pred)
+        }
+
+    except Exception as e:
+        print("❌ ERROR:", str(e))
+        return {
+            "error": str(e)
+        }
 
 # تشغيل السيرفر
 import uvicorn
