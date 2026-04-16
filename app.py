@@ -21,8 +21,8 @@ if not os.path.exists(MODEL_PATH):
     )
 
 # تحميل الموديل
-model = tf.keras.models.load_model(MODEL_PATH)
-
+model = None
+print("⚠️ model loading skipped temporarily")
 # أسماء الكلاسات (عدليها حسبك)
 class_names = ["No Seatbelt", "Seatbelt"]
 
