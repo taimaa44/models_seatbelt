@@ -1,6 +1,7 @@
 fastapi
 uvicorn
-ultralytics
-opencv-python
+tensorflow
+opencv-python-headless
+numpy
 python-multipart
 gdown
