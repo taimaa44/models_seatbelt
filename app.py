@@ -6,8 +6,8 @@ from PIL import Image
 import io
 import os
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(APP_DIR, "model_assets")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(BASE_DIR, "model_assets")
 
 MODEL_PATH = os.path.join(MODEL_DIR, "seatbelt_classifier_final.keras")
 THRESHOLD_PATH = os.path.join(MODEL_DIR, "best_threshold.npy")
@@ -34,7 +34,7 @@ app = FastAPI(title="Seatbelt Detection API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # لاحقًا بدليها بدومين موقعك
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
