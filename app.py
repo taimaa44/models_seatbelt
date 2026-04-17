@@ -1,51 +1,80 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import tensorflow as tf
 import numpy as np
-import cv2
-import shutil
+from PIL import Image
+import io
 import os
-import gdown
 
-app = FastAPI()
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(APP_DIR, "model_assets")
 
-MODEL_PATH = "seatbelt_classifier_final.keras"
+MODEL_PATH = os.path.join(MODEL_DIR, "seatbelt_classifier_final.keras")
+THRESHOLD_PATH = os.path.join(MODEL_DIR, "best_threshold.npy")
+CLASS_NAMES_PATH = os.path.join(MODEL_DIR, "class_names.txt")
 
-# تحميل الموديل
 if not os.path.exists(MODEL_PATH):
-    gdown.download(
-        "https://drive.google.com/uc?id=14gorD0JYxYif8jiKZt-pYvdzglWyQeqH",
-        MODEL_PATH,
-        quiet=False
-    )
+    raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
 
-# تحميل الموديل (بدون compile)
+if not os.path.exists(THRESHOLD_PATH):
+    raise FileNotFoundError(f"Threshold file not found: {THRESHOLD_PATH}")
+
+if not os.path.exists(CLASS_NAMES_PATH):
+    raise FileNotFoundError(f"Class names file not found: {CLASS_NAMES_PATH}")
+
 model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-print("✅ Model loaded")
+best_threshold = float(np.load(THRESHOLD_PATH))
 
-class_names = ["No Seatbelt", "Seatbelt"]
+with open(CLASS_NAMES_PATH, "r", encoding="utf-8") as f:
+    class_names = [line.strip() for line in f.readlines() if line.strip()]
+
+IMG_SIZE = (300, 300)
+
+app = FastAPI(title="Seatbelt Detection API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # لاحقًا بدليها بدومين موقعك
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+def preprocess_image(image_bytes: bytes):
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image = image.resize(IMG_SIZE)
+    img_array = np.array(image, dtype=np.float32)
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
 
 @app.get("/")
-def home():
-    return {"message": "API is working 🚀"}
+def root():
+    return {"message": "Seatbelt API is running"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    with open("input.jpg", "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image")
 
-    img = cv2.imread("input.jpg")
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, (300, 300))
-    img = img / 255.0
-    img = np.expand_dims(img, axis=0)
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Empty file")
 
-    pred = model.predict(img)[0][0]
+    img_array = preprocess_image(image_bytes)
 
-    label = class_names[1] if pred >= 0.5 else class_names[0]
-
-    confidence = float(pred) if pred >= 0.5 else float(1 - pred)
+    prob = float(model.predict(img_array, verbose=0)[0][0])
+    pred_idx = 1 if prob >= best_threshold else 0
+    pred_class = class_names[pred_idx]
+    confidence = prob if pred_idx == 1 else (1.0 - prob)
 
     return {
-        "prediction": label,
-        "confidence": confidence
+        "predicted_class": pred_class,
+        "seatbelt_on": bool(pred_idx == 1),
+        "confidence": round(float(confidence), 6),
+        "raw_probability": round(float(prob), 6),
+        "threshold": round(float(best_threshold), 6),
     }
