@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 import io
 import os
+import gdown
 from tensorflow import keras
 
 # =========================
@@ -12,8 +13,16 @@ from tensorflow import keras
 # =========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "model_assets")
+os.makedirs(MODEL_DIR, exist_ok=True)
 
 MODEL_PATH = os.path.join(MODEL_DIR, "seatbelt_model.h5")
+FILE_ID = "1JQVA5Lqcl_jKD802S_YwQVZJEHKYj4PlJ"
+MODEL_URL = f"https://drive.google.com/uc?id={FILE_ID}"
+
+if not os.path.exists(MODEL_PATH):
+    print("Downloading model from Google Drive...")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+
 THRESHOLD_PATH = os.path.join(MODEL_DIR, "best_threshold.npy")
 CLASS_NAMES_PATH = os.path.join(MODEL_DIR, "class_names.txt")
 
