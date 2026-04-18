@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 import io
 import os
-import gdown
+import tensorflow as tf
 from tensorflow import keras
 
 # =========================
@@ -13,21 +13,13 @@ from tensorflow import keras
 # =========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "model_assets")
-os.makedirs(MODEL_DIR, exist_ok=True)
 
-MODEL_PATH = os.path.join(MODEL_DIR, "seatbelt_model.h5")
-FILE_ID = "1JQVA5Lqcl_jKD802S_YwQVZJEHKYj4PlJ"
-MODEL_URL = f"https://drive.google.com/uc?id={FILE_ID}"
-
-if not os.path.exists(MODEL_PATH):
-    print("Downloading model from Google Drive...")
-    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+# جربي هذا أولاً إذا رفعتي الملف بصيغة .keras
+KERAS_MODEL_PATH = os.path.join(MODEL_DIR, "seatbelt_classifier_final.keras")
+H5_MODEL_PATH = os.path.join(MODEL_DIR, "seatbelt_model.h5")
 
 THRESHOLD_PATH = os.path.join(MODEL_DIR, "best_threshold.npy")
 CLASS_NAMES_PATH = os.path.join(MODEL_DIR, "class_names.txt")
-
-if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
 
 if not os.path.exists(THRESHOLD_PATH):
     raise FileNotFoundError(f"Threshold file not found: {THRESHOLD_PATH}")
@@ -35,6 +27,17 @@ if not os.path.exists(THRESHOLD_PATH):
 if not os.path.exists(CLASS_NAMES_PATH):
     raise FileNotFoundError(f"Class names file not found: {CLASS_NAMES_PATH}")
 
+# الأفضلية لملف .keras إذا كان موجودًا
+if os.path.exists(KERAS_MODEL_PATH):
+    MODEL_PATH = KERAS_MODEL_PATH
+elif os.path.exists(H5_MODEL_PATH):
+    MODEL_PATH = H5_MODEL_PATH
+else:
+    raise FileNotFoundError(
+        f"No model file found. Expected one of: {KERAS_MODEL_PATH} or {H5_MODEL_PATH}"
+    )
+
+# تحميل الموديل
 model = keras.models.load_model(MODEL_PATH, compile=False)
 best_threshold = float(np.load(THRESHOLD_PATH))
 
@@ -44,7 +47,7 @@ with open(CLASS_NAMES_PATH, "r", encoding="utf-8") as f:
 IMG_SIZE = (300, 300)
 
 # =========================
-# Optional FastAPI app
+# FastAPI app
 # =========================
 app = FastAPI(title="Seatbelt Detection API")
 
@@ -63,6 +66,7 @@ def preprocess_pil_image(image: Image.Image):
     image = image.convert("RGB")
     image = image.resize(IMG_SIZE)
     img_array = np.array(image, dtype=np.float32)
+    img_array = img_array / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
 
@@ -70,6 +74,7 @@ def preprocess_image_bytes(image_bytes: bytes):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize(IMG_SIZE)
     img_array = np.array(image, dtype=np.float32)
+    img_array = img_array / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
 
@@ -88,6 +93,7 @@ def predict_from_array(img_array):
         "confidence": round(float(confidence), 6),
         "raw_probability": round(float(prob), 6),
         "threshold": round(float(best_threshold), 6),
+        "model_file": os.path.basename(MODEL_PATH),
     }
 
 # =========================
@@ -121,8 +127,7 @@ def predict_gradio(image):
         return {"error": "Please upload an image"}
 
     img_array = preprocess_pil_image(image)
-    result = predict_from_array(img_array)
-    return result
+    return predict_from_array(img_array)
 
 # =========================
 # Gradio UI
@@ -144,8 +149,5 @@ with gr.Blocks() as demo:
         api_name="predict"
     )
 
-# =========================
-# Launch
-# =========================
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(server_name="0.0.0.0", server_port=7860)
